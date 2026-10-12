@@ -36,7 +36,7 @@ teardown() { teardown_env; }
 
 @test "derived name uses pane title stripped of glyph" {
   make_session 11 "smart-proxy-51" derived idle 1 "$HOME/apps/smart-proxy" "smart-proxy:@23.%23"
-  export STUB_PANE_TITLES="%23\t_ MII-2017 and MII-2018\n%9\tother\n"
+  export STUB_PANE_TITLES="%23 _ MII-2017 and MII-2018\n%9 other\n"
   run "$BIN" snapshot
   [ "$(jq -r .title <<<"$output")" = "MII-2017 and MII-2018" ]
   [ "$(jq -r .pane <<<"$output")" = "%23" ]
@@ -44,7 +44,7 @@ teardown() { teardown_env; }
 
 @test "non-derived name wins over pane title" {
   make_session 11 "My renamed session" user idle 1 "$HOME/apps/a" "a:@1.%1"
-  export STUB_PANE_TITLES="%1\t_ junk\n"
+  export STUB_PANE_TITLES="%1 _ junk\n"
   run "$BIN" snapshot
   [ "$(jq -r .title <<<"$output")" = "My renamed session" ]
 }
@@ -128,4 +128,10 @@ teardown() { teardown_env; }
   run "$BIN" snapshot
   [ "$status" -eq 0 ]
   [ "$(jq -r .title <<<"$output")" = "Desktop title" ]
+}
+
+@test "repo label outside apps and personal is the basename" {
+  make_session 11 "a" user idle 1 "/Users/stan/Library/Application Support/Claude/scratch-2026-10-08"
+  run "$BIN" snapshot
+  [ "$(jq -r .repo <<<"$output")" = "scratch-2026-10-08" ]
 }

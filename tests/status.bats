@@ -47,7 +47,7 @@ teardown() { teardown_env; }
 @test "new unseen session notifies once with title and repo" {
   not_first_run
   make_session 11 "a-1" derived idle 500 "$HOME/apps/smart-proxy" "a:@1.%1"
-  export STUB_PANE_TITLES="%1\t_ PR 418 regressions\n"
+  export STUB_PANE_TITLES="%1 _ PR 418 regressions\n"
   "$BIN" status >/dev/null
   "$BIN" status >/dev/null
   [ "$(stub_log_lines osascript)" = "1" ]
