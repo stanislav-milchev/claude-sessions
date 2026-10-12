@@ -6,6 +6,8 @@ are waiting for you, and which of those you have not looked at yet.
 Reads Claude Code's own session registry (`~/.claude/sessions/*.json`). No
 hooks, no daemon, no polling of pane contents.
 
+![popup with session list, preview pane and status bar](docs/screenshot.png)
+
 ## Requirements
 
 - macOS (uses `osascript` for notifications and `ps -o lstart` for liveness)
