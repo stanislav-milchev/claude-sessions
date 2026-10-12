@@ -36,6 +36,7 @@ teardown() { teardown_env; }
 }
 
 @test "visible pane is auto-acked and not notified" {
+  not_first_run
   make_session 11 "a" user idle 500 "$HOME/apps/a" "a:@1.%1"
   export STUB_CLIENT_PANES="%1\n"
   run "$BIN" status
@@ -66,6 +67,7 @@ teardown() { teardown_env; }
 }
 
 @test "desktop session never notifies" {
+  not_first_run
   make_session 11 "a" user idle 500 "$HOME/apps/a"
   "$BIN" status >/dev/null
   [ "$(stub_log_lines osascript)" = "0" ]
@@ -96,6 +98,7 @@ teardown() { teardown_env; }
 }
 
 @test "osascript failure does not break status line" {
+  not_first_run
   make_session 11 "a" user idle 500 "$HOME/apps/a" "a:@1.%1"
   mkdir -p "$TEST_TMP/badstubs"
   printf '#!/usr/bin/env bash\nexit 1\n' > "$TEST_TMP/badstubs/osascript"
@@ -115,4 +118,14 @@ teardown() { teardown_env; }
   make_session 13 "c" user idle 600 "$HOME/apps/c" "a:@1.%3"
   "$BIN" status >/dev/null
   [ "$(stub_log_lines osascript)" = "1" ]
+}
+
+@test "corrupt registry on status tick prints error marker, logs, exits 0" {
+  not_first_run
+  make_session 11 "a" user idle 500 "$HOME/apps/a" "a:@1.%1"
+  : > "$CLAUDE_SESSIONS_DIR/11.json"
+  run "$BIN" status
+  [ "$status" -eq 0 ]
+  [[ "$output" == *" ! "* ]]
+  grep -q "11.json" "$(dirname "$CLAUDE_SESSIONS_STATE")/errors.log"
 }

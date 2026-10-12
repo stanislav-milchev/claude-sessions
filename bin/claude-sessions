@@ -8,6 +8,7 @@ STATE_FILE="${CLAUDE_SESSIONS_STATE:-$HOME/.cache/claude-sessions/seen.json}"
 NOTIFIED_FILE="$(dirname "$STATE_FILE")/notified.json"
 PROJECTS_DIR="${CLAUDE_SESSIONS_PROJECTS_DIR:-$HOME/.claude/projects}"
 ALIVE_CMD="${CLAUDE_SESSIONS_ALIVE_CMD:-kill -0}"
+ERROR_LOG="$(dirname "$STATE_FILE")/errors.log"
 EMPTY_STATE='{"seen":{},"titles":{}}'
 
 die() {
@@ -44,14 +45,22 @@ registry_pid() {
   jq -er '.pid // error("no pid")' "$1" 2>/dev/null || die "unreadable registry file or missing pid: $1"
 }
 
+process_start_matches() {
+  local pid="$1" recorded="$2" actual
+  [[ -n "$recorded" ]] || return 0
+  actual="$(TZ=UTC ps -p "$pid" -o lstart= 2>/dev/null | sed 's/^ *//; s/ *$//')"
+  [[ "$actual" == "$recorded" ]]
+}
+
 live_registry_files() {
-  local f pid
+  local f pid recorded_start
   for f in "$REGISTRY_DIR"/*.json; do
     [[ -e "$f" ]] || continue
     pid="$(registry_pid "$f")"
-    if $ALIVE_CMD "$pid" 2>/dev/null; then
-      printf '%s\n' "$f"
-    fi
+    $ALIVE_CMD "$pid" 2>/dev/null || continue
+    recorded_start="$(jq -r '.procStart // ""' "$f")"
+    process_start_matches "$pid" "$recorded_start" || continue
+    printf '%s\n' "$f"
   done
 }
 
@@ -235,13 +244,30 @@ status_line() {
   fi
 }
 
-status() {
+status_tick() {
   local snap
   snap="$(snapshot)"
   auto_ack_visible_panes "$snap"
   snap="$(snapshot)"
   notify_new_ready "$snap"
   status_line "$snap"
+}
+
+log_errors() {
+  local line
+  while IFS= read -r line; do
+    printf '%s %s\n' "$(date '+%F %T')" "$line"
+  done >> "$ERROR_LOG"
+}
+
+status() {
+  local out
+  mkdir -p "$(dirname "$ERROR_LOG")"
+  if out="$("$SELF" status-tick 2> >(log_errors))"; then
+    printf '%s' "$out"
+  else
+    printf '#[fg=#f7768e,bold] ! #[default]'
+  fi
 }
 
 jump() {
@@ -284,8 +310,10 @@ rows() {
       age="$(format_age "$idle")"
     fi
     marker="$(row_marker "$unseen" "$ready" "$tmux")"
-    printf '%s\t%s %-44.44s %-5s %4s  %s\n' "$pid" "$marker" "$title" "$status" "$age" "$repo"
-  done < <(snapshot | jq -r '[.pid, .title, .status, .tmux, .ready, .unseen, .idleFor, .repo] | map(tostring) | join("\u001f")')
+    printf '%s\t%s %s %-5s %4s  %s\n' "$pid" "$marker" "$title" "$status" "$age" "$repo"
+  done < <(snapshot | jq -r '
+    (.title[:44] | (44 - length) as $pad | if $pad > 0 then . + (" " * $pad) else . end) as $title
+    | [.pid, $title, .status, .tmux, .ready, .unseen, .idleFor, .repo] | map(tostring) | join("\u001f")')
 }
 
 transcript_path() {
@@ -295,8 +323,9 @@ transcript_path() {
 recent_prompts() {
   jq -r '
     select(.type == "user" and (.message.content | type) == "string")
+    | select(((.isMeta // false) or (.isSidechain // false)) | not)
     | .message.content | split("\n")[0]
-    | select((startswith("<") | not) and length > 25)' "$1" 2>/dev/null \
+    | select((startswith("<") | not) and (startswith("This session is being continued") | not) and length > 25)' "$1" 2>/dev/null \
     | tail -5 | cut -c1-160 | sed 's/^/  • /'
 }
 
@@ -339,6 +368,7 @@ main() {
   case "$cmd" in
     snapshot) snapshot ;;
     status) status ;;
+    status-tick) status_tick ;;
     jump) [[ $# -eq 1 ]] || usage; jump "$1" ;;
     rows)    rows ;;
     preview) [[ $# -eq 1 ]] || usage; preview "$1" ;;

@@ -135,3 +135,20 @@ teardown() { teardown_env; }
   run "$BIN" snapshot
   [ "$(jq -r .repo <<<"$output")" = "scratch-2026-10-08" ]
 }
+
+@test "stale file whose procStart does not match the running process is skipped" {
+  make_session 11 "a" user idle 1 "$HOME/apps/a" "a:@1.%1"
+  jq '.procStart = "Mon Oct 12 07:28:14 2026"' "$CLAUDE_SESSIONS_DIR/11.json" > "$TEST_TMP/x" && mv "$TEST_TMP/x" "$CLAUDE_SESSIONS_DIR/11.json"
+  export STUB_PROC_START="Tue Oct 13 09:00:00 2026"
+  run "$BIN" snapshot
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "file whose procStart matches the running process is kept" {
+  make_session 11 "a" user idle 1 "$HOME/apps/a" "a:@1.%1"
+  jq '.procStart = "Mon Oct 12 07:28:14 2026"' "$CLAUDE_SESSIONS_DIR/11.json" > "$TEST_TMP/x" && mv "$TEST_TMP/x" "$CLAUDE_SESSIONS_DIR/11.json"
+  export STUB_PROC_START="  Mon Oct 12 07:28:14 2026"
+  run "$BIN" snapshot
+  [ "$(jq -r .pid <<<"$output")" = "11" ]
+}

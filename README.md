@@ -19,6 +19,8 @@ Then add the printed snippet to `~/.tmux.conf`. Requires bash >= 4.4 on PATH
   `● 1 new · 2/4` one you have not looked at (highlighted).
 - `prefix g`: popup list. Enter jumps to the pane. `ctrl-t` sets your own title
   for a session. Preview on the right shows cwd, branch and recent prompts.
+- If a tick fails (corrupt registry file, missing binary) the segment shows a red
+  `!` and the reason is appended to `~/.cache/claude-sessions/errors.log`.
 - Looking at a pane acknowledges it. A session becoming ready sends a macOS
   notification and a terminal bell. The very first tick after install seeds
   state silently so already-idle sessions do not all fire at once.

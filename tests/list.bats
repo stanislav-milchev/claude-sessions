@@ -78,3 +78,27 @@ teardown() { teardown_env; }
   [[ "$output" == *"prompt number 3 "* ]]
   [ "$(grep -c 'prompt number' <<<"$output")" = "5" ]
 }
+
+@test "preview drops meta, sidechain and compaction records" {
+  make_session 11 "a" user idle 500 "$HOME/apps/a" "a:@1.%1"
+  mkdir -p "$CLAUDE_SESSIONS_PROJECTS_DIR/p"
+  {
+    echo '{"type":"user","message":{"content":"a genuine prompt that is long enough to show"}}'
+    echo '{"type":"user","isMeta":true,"message":{"content":"Another Claude session sent a message: hello there"}}'
+    echo '{"type":"user","isSidechain":true,"message":{"content":"sidechain prompt that is long enough to show"}}'
+    echo '{"type":"user","message":{"content":"This session is being continued from a previous conversation that ran out of context."}}'
+  } > "$CLAUDE_SESSIONS_PROJECTS_DIR/p/sid-11.jsonl"
+  run "$BIN" preview 11
+  [[ "$output" == *"a genuine prompt"* ]]
+  [[ "$output" != *"Another Claude session"* ]]
+  [[ "$output" != *"sidechain prompt"* ]]
+  [[ "$output" != *"being continued"* ]]
+}
+
+@test "rows truncates titles by characters, not bytes" {
+  make_session 11 "Jev’s confidence docs for crawler ticket — long and longer" user idle 500 "$HOME/apps/a" "a:@1.%1"
+  run "$BIN" rows
+  [[ "$output" == *"Jev’s confidence docs for crawler ticket — l "* ]]
+  [[ "$output" != *"— lo"* ]]
+  [[ "$output" != *$'\xef\xbf\xbd'* ]]
+}
