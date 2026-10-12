@@ -190,8 +190,17 @@ send_notification() {
     >/dev/null 2>&1 || printf 'claude-sessions: osascript failed for notification\n' >&2
 }
 
+seed_notified_silently() {
+  local snap="$1"
+  jq -sc 'map(select(.unseen) | {(.pid|tostring): .statusUpdatedAt}) | add // {}' <<<"$snap"
+}
+
 notify_new_ready() {
   local snap="$1" notified row pid ts title repo rang=0
+  if [[ ! -f "$NOTIFIED_FILE" ]]; then
+    write_json_atomic "$NOTIFIED_FILE" "$(seed_notified_silently "$snap")"
+    return 0
+  fi
   notified="$(read_notified)"
   while IFS= read -r row; do
     [[ -n "$row" ]] || continue
@@ -248,6 +257,79 @@ jump() {
   ack "$pid"
 }
 
+format_age() {
+  local s="$1"
+  if   [[ "$s" -lt 60 ]];    then printf '%ds' "$s"
+  elif [[ "$s" -lt 3600 ]];  then printf '%dm' $((s / 60))
+  elif [[ "$s" -lt 86400 ]]; then printf '%dh' $((s / 3600))
+  else                            printf '%dd' $((s / 86400))
+  fi
+}
+
+row_marker() {
+  local unseen="$1" ready="$2" tmux="$3"
+  if   [[ "$tmux" == "" ]];     then printf '~'
+  elif [[ "$unseen" == true ]]; then printf '●'
+  elif [[ "$ready" == true ]];  then printf '·'
+  else                               printf ' '
+  fi
+}
+
+rows() {
+  local pid title status tmux ready unseen idle repo age marker
+  while IFS=$'\x1f' read -r pid title status tmux ready unseen idle repo; do
+    age=""
+    if [[ "$ready" == true ]]; then
+      age="$(format_age "$idle")"
+    fi
+    marker="$(row_marker "$unseen" "$ready" "$tmux")"
+    printf '%s\t%s %-44.44s %-5s %4s  %s\n' "$pid" "$marker" "$title" "$status" "$age" "$repo"
+  done < <(snapshot | jq -r '[.pid, .title, .status, .tmux, .ready, .unseen, .idleFor, .repo] | map(tostring) | join("\u001f")')
+}
+
+transcript_path() {
+  find "$PROJECTS_DIR" -maxdepth 2 -name "$1.jsonl" -print -quit 2>/dev/null
+}
+
+recent_prompts() {
+  jq -r '
+    select(.type == "user" and (.message.content | type) == "string")
+    | .message.content | split("\n")[0]
+    | select((startswith("<") | not) and length > 25)' "$1" 2>/dev/null \
+    | tail -5 | cut -c1-160 | sed 's/^/  • /'
+}
+
+preview() {
+  local row cwd sid branch transcript
+  row="$(session_row "$1")"
+  cwd="$(jq -r '.cwd' <<<"$row")"
+  sid="$(jq -r '.sessionId' <<<"$row")"
+  branch="$(git -C "$cwd" rev-parse --abbrev-ref HEAD 2>/dev/null || printf '%s' '-')"
+  printf 'cwd:    %s\nbranch: %s\n\nrecent prompts:\n' "$cwd" "$branch"
+  transcript="$(transcript_path "$sid")"
+  if [[ -z "$transcript" ]]; then
+    printf '  no transcript\n'
+    return 0
+  fi
+  recent_prompts "$transcript"
+}
+
+list() {
+  require_bin fzf
+  local selected pid
+  selected="$(rows | fzf \
+      --delimiter='\t' --with-nth=2.. --no-sort --layout=reverse \
+      --header='enter: jump   ctrl-t: set title   ctrl-r: reload   esc: close' \
+      --preview "\"$SELF\" preview {1}" --preview-window='right,45%,wrap' \
+      --bind "ctrl-r:reload(\"$SELF\" rows)" \
+      --bind "ctrl-t:execute(\"$SELF\" title {1} < /dev/tty > /dev/tty)+reload(\"$SELF\" rows)" \
+    )" || return 0
+  pid="$(cut -f1 <<<"$selected")"
+  if [[ -n "$pid" ]]; then
+    jump "$pid"
+  fi
+}
+
 main() {
   require_bin jq
   require_bin tmux
@@ -257,6 +339,9 @@ main() {
     snapshot) snapshot ;;
     status) status ;;
     jump) [[ $# -eq 1 ]] || usage; jump "$1" ;;
+    rows)    rows ;;
+    preview) [[ $# -eq 1 ]] || usage; preview "$1" ;;
+    list)    list ;;
     ack)   [[ $# -eq 1 ]] || usage; ack "$1" ;;
     title) [[ $# -ge 1 ]] || usage; set_title "$@" ;;
     *) usage ;;

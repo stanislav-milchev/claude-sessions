@@ -45,6 +45,7 @@ teardown() { teardown_env; }
 }
 
 @test "new unseen session notifies once with title and repo" {
+  not_first_run
   make_session 11 "a-1" derived idle 500 "$HOME/apps/smart-proxy" "a:@1.%1"
   export STUB_PANE_TITLES="%1\t_ PR 418 regressions\n"
   "$BIN" status >/dev/null
@@ -54,6 +55,7 @@ teardown() { teardown_env; }
 }
 
 @test "notifies again after a busy to idle cycle" {
+  not_first_run
   make_session 11 "a" user idle 500 "$HOME/apps/a" "a:@1.%1"
   "$BIN" status >/dev/null
   make_session 11 "a" user busy 600 "$HOME/apps/a" "a:@1.%1"
@@ -70,6 +72,7 @@ teardown() { teardown_env; }
 }
 
 @test "bell written to each client tty" {
+  not_first_run
   make_session 11 "a" user idle 500 "$HOME/apps/a" "a:@1.%1"
   export STUB_CLIENT_TTYS="$TEST_TMP/tty1\n$TEST_TMP/tty2\n"
   "$BIN" status >/dev/null
@@ -78,6 +81,7 @@ teardown() { teardown_env; }
 }
 
 @test "title with quotes and backslashes is escaped for osascript" {
+  not_first_run
   make_session 11 'say "hi" \ bye' user idle 500 "$HOME/apps/a" "a:@1.%1"
   "$BIN" status >/dev/null
   grep -qF 'display notification "say \"hi\" \\ bye"' "$STUB_LOG"
@@ -99,4 +103,16 @@ teardown() { teardown_env; }
   run env PATH="$TEST_TMP/badstubs:$PATH" "$BIN" status
   [ "$status" -eq 0 ]
   [[ "$output" == *"1 new"* ]]
+}
+
+@test "first run seeds notified file without notifying" {
+  make_session 11 "a" user idle 500 "$HOME/apps/a" "a:@1.%1"
+  make_session 12 "b" user idle 500 "$HOME/apps/b" "a:@1.%2"
+  run "$BIN" status
+  [[ "$output" == *"2 new"* ]]
+  [ "$(stub_log_lines osascript)" = "0" ]
+  [ "$(jq -c 'keys' "$(dirname "$CLAUDE_SESSIONS_STATE")/notified.json")" = '["11","12"]' ]
+  make_session 13 "c" user idle 600 "$HOME/apps/c" "a:@1.%3"
+  "$BIN" status >/dev/null
+  [ "$(stub_log_lines osascript)" = "1" ]
 }

@@ -36,3 +36,8 @@ make_session() {
 stub_log_lines() {
   grep -c "$1" "$STUB_LOG" || true
 }
+
+not_first_run() {
+  mkdir -p "$(dirname "$CLAUDE_SESSIONS_STATE")"
+  echo '{}' > "$(dirname "$CLAUDE_SESSIONS_STATE")/notified.json"
+}
