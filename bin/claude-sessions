@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+shopt -s inherit_errexit
 
 SELF="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
 REGISTRY_DIR="${CLAUDE_SESSIONS_DIR:-$HOME/.claude/sessions}"
@@ -7,6 +8,7 @@ STATE_FILE="${CLAUDE_SESSIONS_STATE:-$HOME/.cache/claude-sessions/seen.json}"
 NOTIFIED_FILE="$(dirname "$STATE_FILE")/notified.json"
 PROJECTS_DIR="${CLAUDE_SESSIONS_PROJECTS_DIR:-$HOME/.claude/projects}"
 ALIVE_CMD="${CLAUDE_SESSIONS_ALIVE_CMD:-kill -0}"
+EMPTY_STATE='{"seen":{},"titles":{}}'
 
 die() {
   printf 'claude-sessions: %s\n' "$*" >&2
@@ -28,12 +30,82 @@ now_ms() {
   printf '%s' "${CLAUDE_SESSIONS_NOW_MS:-$(date +%s000)}"
 }
 
+read_state() {
+  if [[ ! -f "$STATE_FILE" ]]; then
+    printf '%s' "$EMPTY_STATE"
+    return
+  fi
+  jq -ce '(.seen|type)=="object" and (.titles|type)=="object"' "$STATE_FILE" >/dev/null 2>&1 \
+    || die "corrupt state file: $STATE_FILE"
+  cat "$STATE_FILE"
+}
+
+registry_pid() {
+  jq -er '.pid // error("no pid")' "$1" 2>/dev/null || die "unreadable registry file or missing pid: $1"
+}
+
+live_registry_files() {
+  local f pid
+  for f in "$REGISTRY_DIR"/*.json; do
+    [[ -e "$f" ]] || continue
+    pid="$(registry_pid "$f")"
+    if $ALIVE_CMD "$pid" 2>/dev/null; then
+      printf '%s\n' "$f"
+    fi
+  done
+}
+
+pane_titles_json() {
+  tmux list-panes -a -F '#{pane_id}	#{pane_title}' 2>/dev/null \
+    | jq -Rs 'split("\n") | map(select(. != "") | split("\t") | {(.[0]): .[1]}) | add // {}'
+}
+
+SNAPSHOT_JQ='
+def need(f): if .[f] == null then error("missing field " + f + " in " + input_filename) else . end;
+[inputs
+ | need("cwd") | need("name") | need("nameSource") | need("status") | need("statusUpdatedAt")
+ | (.pid|tostring) as $key
+ | (.tmux // "") as $tmux
+ | (if $tmux == "" then "" else ($tmux | split(".") | last) end) as $pane
+ | (($titles[$pane] // "") | sub("^[^A-Za-z0-9]+[[:space:]]*"; "")) as $paneTitle
+ | ($state.titles[$key]
+    // (if .nameSource != "derived" then .name
+        elif $paneTitle != "" then $paneTitle
+        else .name end)) as $title
+ | (.cwd
+    | sub("^" + $home + "/(apps|personal)/"; "")
+    | sub("/(\\.claude/worktrees|\\.worktrees)/"; " ⎇ ")) as $repo
+ | (.status != "busy") as $ready
+ | ($ready and $tmux != "" and (.statusUpdatedAt > ($state.seen[$key] // 0))) as $unseen
+ | (if $unseen then 0 elif $tmux == "" then 3 elif $ready then 1 else 2 end) as $group
+ | {pid, sessionId, cwd, tmux: $tmux, pane: $pane, name, status, statusUpdatedAt,
+    title: $title, repo: $repo, ready: $ready, unseen: $unseen,
+    idleFor: ((($now - .statusUpdatedAt) / 1000) | floor), group: $group}
+]
+| sort_by(.group, .statusUpdatedAt)
+| .[] | del(.group)'
+
+snapshot() {
+  local files=() f listing
+  listing="$(live_registry_files)"
+  [[ -n "$listing" ]] || return 0
+  while IFS= read -r f; do files+=("$f"); done <<<"$listing"
+  jq -nc \
+    --argjson state "$(read_state)" \
+    --argjson titles "$(pane_titles_json)" \
+    --argjson now "$(now_ms)" \
+    --arg home "$HOME" \
+    "$SNAPSHOT_JQ" "${files[@]}" \
+    || die "registry read failed"
+}
+
 main() {
   require_bin jq
   require_bin tmux
   local cmd="${1:-}"
   shift || true
   case "$cmd" in
+    snapshot) snapshot ;;
     *) usage ;;
   esac
 }
