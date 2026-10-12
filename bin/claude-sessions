@@ -18,7 +18,7 @@ die() {
 
 usage() {
   cat >&2 <<'USAGE'
-usage: claude-sessions <status|list|rows|jump PID|ack PID|title PID [TEXT]|preview PID|snapshot>
+usage: claude-sessions <status|list|rows|jump PID|close PID|ack PID|title PID [TEXT]|preview PID|snapshot>
 USAGE
   exit 1
 }
@@ -284,6 +284,19 @@ jump() {
   ack "$pid"
 }
 
+close() {
+  local pid="$1" row target pane title answer
+  row="$(session_row "$pid")"
+  target="$(jq -r '.tmux' <<<"$row")"
+  [[ -n "$target" ]] || die "pid $pid has no tmux pane"
+  pane="${target##*.}"
+  title="$(jq -r '.title' <<<"$row")"
+  printf 'kill "%s"? [y/N] ' "$title"
+  IFS= read -r answer || answer=""
+  [[ "$answer" == [yY] ]] || return 0
+  tmux kill-pane -t "$pane"
+}
+
 format_age() {
   local s="$1"
   if   [[ "$s" -lt 60 ]];    then printf '%ds' "$s"
@@ -349,10 +362,11 @@ list() {
   local selected pid
   selected="$(rows | fzf \
       --delimiter='\t' --with-nth=2.. --no-sort --layout=reverse \
-      --header='enter: jump   ctrl-t: set title   ctrl-r: reload   esc: close' \
+      --header='enter: jump   ctrl-x: kill   ctrl-t: set title   ctrl-r: reload   esc: close' \
       --preview "\"$SELF\" preview {1}" --preview-window='right,45%,wrap' \
       --bind "ctrl-r:reload(\"$SELF\" rows)" \
       --bind "ctrl-t:execute(\"$SELF\" title {1} < /dev/tty > /dev/tty)+reload(\"$SELF\" rows)" \
+      --bind "ctrl-x:execute(\"$SELF\" close {1} < /dev/tty > /dev/tty)+reload(sleep 0.5; \"$SELF\" rows)" \
     )" || return 0
   pid="$(cut -f1 <<<"$selected")"
   if [[ -n "$pid" ]]; then
@@ -370,6 +384,7 @@ main() {
     status) status ;;
     status-tick) status_tick ;;
     jump) [[ $# -eq 1 ]] || usage; jump "$1" ;;
+    close) [[ $# -eq 1 ]] || usage; close "$1" ;;
     rows)    rows ;;
     preview) [[ $# -eq 1 ]] || usage; preview "$1" ;;
     list)    list ;;
