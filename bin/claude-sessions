@@ -8,6 +8,7 @@ STATE_FILE="${CLAUDE_SESSIONS_STATE:-$HOME/.cache/claude-sessions/seen.json}"
 NOTIFIED_FILE="$(dirname "$STATE_FILE")/notified.json"
 PROJECTS_DIR="${CLAUDE_SESSIONS_PROJECTS_DIR:-$HOME/.claude/projects}"
 ALIVE_CMD="${CLAUDE_SESSIONS_ALIVE_CMD:-kill -0}"
+KILL_CMD="${CLAUDE_SESSIONS_KILL_CMD:-kill -TERM}"
 ERROR_LOG="$(dirname "$STATE_FILE")/errors.log"
 EMPTY_STATE='{"seen":{},"titles":{}}'
 
@@ -285,16 +286,18 @@ jump() {
 }
 
 close() {
-  local pid="$1" row target pane title answer
+  local pid="$1" row target title answer
   row="$(session_row "$pid")"
   target="$(jq -r '.tmux' <<<"$row")"
-  [[ -n "$target" ]] || die "pid $pid has no tmux pane"
-  pane="${target##*.}"
   title="$(jq -r '.title' <<<"$row")"
   printf 'kill "%s"? [y/N] ' "$title"
   IFS= read -r answer || answer=""
   [[ "$answer" == [yY] ]] || return 0
-  tmux kill-pane -t "$pane"
+  if [[ -n "$target" ]]; then
+    tmux kill-pane -t "${target##*.}"
+  else
+    $KILL_CMD "$pid"
+  fi
 }
 
 format_age() {

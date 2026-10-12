@@ -5,6 +5,7 @@ setup_env() {
   export CLAUDE_SESSIONS_STATE="$TEST_TMP/state/seen.json"
   export CLAUDE_SESSIONS_PROJECTS_DIR="$TEST_TMP/projects"
   export CLAUDE_SESSIONS_ALIVE_CMD="$BATS_TEST_DIRNAME/stubs/alive"
+  export CLAUDE_SESSIONS_KILL_CMD="$BATS_TEST_DIRNAME/stubs/killproc"
   export CLAUDE_SESSIONS_NOW_MS=1000000000000
   export STUB_LOG="$TEST_TMP/stub.log"
   export STUB_ALIVE_PIDS=""

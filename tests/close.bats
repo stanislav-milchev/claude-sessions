@@ -20,10 +20,18 @@ teardown() { teardown_env; }
   [ "$(stub_log_lines kill-pane)" = "0" ]
 }
 
-@test "close refuses desktop session" {
+@test "close terminates a desktop session's process after y" {
   make_session 11 "Desk" user idle 500 "$HOME/apps/a"
   run bash -c "echo y | '$BIN' close 11"
-  [ "$status" -eq 1 ]
-  [[ "$output" == *"no tmux pane"* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'kill "Desk"? [y/N]'* ]]
+  grep -q '^killproc 11$' "$STUB_LOG"
   [ "$(stub_log_lines kill-pane)" = "0" ]
+}
+
+@test "close desktop session does nothing on n" {
+  make_session 11 "Desk" user idle 500 "$HOME/apps/a"
+  run bash -c "echo n | '$BIN' close 11"
+  [ "$status" -eq 0 ]
+  [ "$(stub_log_lines killproc)" = "0" ]
 }

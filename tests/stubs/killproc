@@ -1,0 +1,2 @@
+#!/usr/bin/env bash
+printf 'killproc %s\n' "$*" >> "$STUB_LOG"
