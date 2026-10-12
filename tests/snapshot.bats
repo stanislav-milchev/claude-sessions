@@ -121,3 +121,11 @@ teardown() { teardown_env; }
   [ "$status" -ne 0 ]
   [[ "$output" == *"seen.json"* ]]
 }
+
+@test "missing nameSource is treated as non-derived" {
+  make_session 11 "Desktop title" user idle 1 "$HOME/apps/a"
+  jq 'del(.nameSource)' "$CLAUDE_SESSIONS_DIR/11.json" > "$TEST_TMP/x" && mv "$TEST_TMP/x" "$CLAUDE_SESSIONS_DIR/11.json"
+  run "$BIN" snapshot
+  [ "$status" -eq 0 ]
+  [ "$(jq -r .title <<<"$output")" = "Desktop title" ]
+}

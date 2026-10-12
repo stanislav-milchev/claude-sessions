@@ -63,13 +63,13 @@ pane_titles_json() {
 SNAPSHOT_JQ='
 def need(f): if .[f] == null then error("missing field " + f + " in " + input_filename) else . end;
 [inputs
- | need("cwd") | need("name") | need("nameSource") | need("status") | need("statusUpdatedAt")
+ | need("cwd") | need("name") | need("status") | need("statusUpdatedAt")
  | (.pid|tostring) as $key
  | (.tmux // "") as $tmux
  | (if $tmux == "" then "" else ($tmux | split(".") | last) end) as $pane
  | (($titles[$pane] // "") | sub("^[^A-Za-z0-9]+[[:space:]]*"; "")) as $paneTitle
  | ($state.titles[$key]
-    // (if .nameSource != "derived" then .name
+    // (if (.nameSource // "") != "derived" then .name
         elif $paneTitle != "" then $paneTitle
         else .name end)) as $title
  | (.cwd
