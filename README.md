@@ -1,7 +1,9 @@
 # claude-sessions
 
 One place for every Claude Code session running in tmux: which are busy, which
-are waiting for you, and which of those you have not looked at yet.
+are waiting for you, and which of those you have not looked at yet. The moment a
+session finishes and needs your input you get a macOS notification and a
+terminal bell, and the tmux status bar shows how many are waiting.
 
 Reads Claude Code's own session registry (`~/.claude/sessions/*.json`). No
 hooks, no daemon, no polling of pane contents.
