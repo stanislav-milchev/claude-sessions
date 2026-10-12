@@ -341,7 +341,7 @@ recent_prompts() {
     select(.type == "user" and (.message.content | type) == "string")
     | select(((.isMeta // false) or (.isSidechain // false)) | not)
     | .message.content | split("\n")[0]
-    | select((startswith("<") | not) and (startswith("This session is being continued") | not) and length > 25)' "$1" 2>/dev/null \
+    | select((startswith("<") | not) and (startswith("This session is being continued") | not) and length > 3)' "$1" 2>/dev/null \
     | tail -5 | cut -c1-160 | sed 's/^/  • /'
 }
 
@@ -357,7 +357,13 @@ preview() {
     printf '  no transcript\n'
     return 0
   fi
-  recent_prompts "$transcript"
+  local prompts
+  prompts="$(recent_prompts "$transcript")"
+  if [[ -z "$prompts" ]]; then
+    printf '  (none)\n'
+    return 0
+  fi
+  printf '%s\n' "$prompts"
 }
 
 list() {

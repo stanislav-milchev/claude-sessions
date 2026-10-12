@@ -102,3 +102,25 @@ teardown() { teardown_env; }
   [[ "$output" != *"— lo"* ]]
   [[ "$output" != *$'\xef\xbf\xbd'* ]]
 }
+
+@test "preview shows short prompts but drops trivial ones" {
+  make_session 11 "a" user idle 500 "$HOME/apps/a" "a:@1.%1"
+  mkdir -p "$CLAUDE_SESSIONS_PROJECTS_DIR/p"
+  {
+    echo '{"type":"user","message":{"content":"test"}}'
+    echo '{"type":"user","message":{"content":"yes"}}'
+    echo '{"type":"user","message":{"content":"whats this repo do"}}'
+  } > "$CLAUDE_SESSIONS_PROJECTS_DIR/p/sid-11.jsonl"
+  run "$BIN" preview 11
+  [[ "$output" == *"• test"* ]]
+  [[ "$output" == *"• whats this repo do"* ]]
+  [[ "$output" != *"• yes"* ]]
+}
+
+@test "preview prints (none) when no prompt qualifies" {
+  make_session 11 "a" user idle 500 "$HOME/apps/a" "a:@1.%1"
+  mkdir -p "$CLAUDE_SESSIONS_PROJECTS_DIR/p"
+  echo '{"type":"user","message":{"content":"ok"}}' > "$CLAUDE_SESSIONS_PROJECTS_DIR/p/sid-11.jsonl"
+  run "$BIN" preview 11
+  [[ "$output" == *"(none)"* ]]
+}
