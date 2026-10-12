@@ -152,3 +152,14 @@ teardown() { teardown_env; }
   run "$BIN" snapshot
   [ "$(jq -r .pid <<<"$output")" = "11" ]
 }
+
+@test "repo label honours CLAUDE_SESSIONS_BASE_DIRS" {
+  export CLAUDE_SESSIONS_BASE_DIRS="$HOME/code:$HOME/work"
+  make_session 11 "a" user idle 1 "$HOME/code/foo/sub/dir" "a:@1.%1"
+  make_session 12 "b" user idle 1 "$HOME/work/bar/.worktrees/X/pkg" "a:@1.%2"
+  make_session 13 "c" user idle 1 "$HOME/apps/baz/sub" "a:@1.%3"
+  run "$BIN" snapshot
+  [ "$(jq -r 'select(.pid==11).repo' <<<"$output")" = "foo/sub/dir" ]
+  [ "$(jq -r 'select(.pid==12).repo' <<<"$output")" = "bar ⎇ X/pkg" ]
+  [ "$(jq -r 'select(.pid==13).repo' <<<"$output")" = "sub" ]
+}

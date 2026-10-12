@@ -129,3 +129,24 @@ teardown() { teardown_env; }
   [[ "$output" == *" ! "* ]]
   grep -q "11.json" "$(dirname "$CLAUDE_SESSIONS_STATE")/errors.log"
 }
+
+@test "status styles can be overridden by env" {
+  not_first_run
+  make_session 11 "a" user idle 500 "$HOME/apps/a" "a:@1.%1"
+  run env CLAUDE_SESSIONS_STYLE_NEW='#[fg=red]' "$BIN" status
+  [[ "$output" == "#[fg=red] ● 1 new"* ]]
+  "$BIN" ack 11
+  run env CLAUDE_SESSIONS_STYLE_READY='#[fg=green]' "$BIN" status
+  [[ "$output" == "#[fg=green] ● 1/1"* ]]
+  make_session 11 "a" user busy 600 "$HOME/apps/a" "a:@1.%1"
+  run env CLAUDE_SESSIONS_STYLE_QUIET='#[fg=blue]' "$BIN" status
+  [[ "$output" == "#[fg=blue] ○ 0/1"* ]]
+}
+
+@test "error marker style can be overridden by env" {
+  not_first_run
+  make_session 11 "a" user idle 500 "$HOME/apps/a" "a:@1.%1"
+  : > "$CLAUDE_SESSIONS_DIR/11.json"
+  run env CLAUDE_SESSIONS_STYLE_ERROR='#[fg=magenta]' "$BIN" status
+  [[ "$output" == "#[fg=magenta] ! "* ]]
+}

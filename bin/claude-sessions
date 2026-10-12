@@ -9,6 +9,11 @@ NOTIFIED_FILE="$(dirname "$STATE_FILE")/notified.json"
 PROJECTS_DIR="${CLAUDE_SESSIONS_PROJECTS_DIR:-$HOME/.claude/projects}"
 ALIVE_CMD="${CLAUDE_SESSIONS_ALIVE_CMD:-kill -0}"
 KILL_CMD="${CLAUDE_SESSIONS_KILL_CMD:-kill -TERM}"
+BASE_DIRS="${CLAUDE_SESSIONS_BASE_DIRS:-$HOME/apps:$HOME/personal}"
+STYLE_NEW="${CLAUDE_SESSIONS_STYLE_NEW:-#[fg=#16161e,bg=#e0af68,bold]}"
+STYLE_READY="${CLAUDE_SESSIONS_STYLE_READY:-#[fg=#7aa2f7]}"
+STYLE_QUIET="${CLAUDE_SESSIONS_STYLE_QUIET:-#[fg=#565f89]}"
+STYLE_ERROR="${CLAUDE_SESSIONS_STYLE_ERROR:-#[fg=#f7768e,bold]}"
 ERROR_LOG="$(dirname "$STATE_FILE")/errors.log"
 EMPTY_STATE='{"seen":{},"titles":{}}'
 
@@ -83,7 +88,7 @@ def need(f): if .[f] == null then error("missing field " + f + " in " + input_fi
         elif $paneTitle != "" then $paneTitle
         else .name end)) as $title
  | (.cwd
-    | sub("^" + $home + "/(apps|personal)/"; "")
+    | reduce $bases[] as $b (.; if startswith($b + "/") then .[($b | length) + 1:] else . end)
     | sub("/(\\.claude/worktrees|\\.worktrees)/"; " ⎇ ")
     | if startswith("/") then (split("/") | last) else . end) as $repo
  | (.status != "busy") as $ready
@@ -105,7 +110,7 @@ snapshot() {
     --argjson state "$(read_state)" \
     --argjson titles "$(pane_titles_json)" \
     --argjson now "$(now_ms)" \
-    --arg home "$HOME" \
+    --argjson bases "$(printf '%s' "$BASE_DIRS" | jq -Rc 'split(":") | map(select(. != ""))')" \
     "$SNAPSHOT_JQ" "${files[@]}" \
     || die "registry read failed"
 }
@@ -237,11 +242,11 @@ status_line() {
   ready="$(jq -s 'map(select(.tmux != "" and .ready)) | length' <<<"$snap")"
   unseen="$(jq -s 'map(select(.unseen)) | length' <<<"$snap")"
   if [[ "$unseen" -gt 0 ]]; then
-    printf '#[fg=#16161e,bg=#e0af68,bold] ● %d new · %d/%d #[default]' "$unseen" "$ready" "$total"
+    printf '%s ● %d new · %d/%d #[default]' "$STYLE_NEW" "$unseen" "$ready" "$total"
   elif [[ "$ready" -gt 0 ]]; then
-    printf '#[fg=#7aa2f7] ● %d/%d #[default]' "$ready" "$total"
+    printf '%s ● %d/%d #[default]' "$STYLE_READY" "$ready" "$total"
   else
-    printf '#[fg=#565f89] ○ %d/%d #[default]' "$ready" "$total"
+    printf '%s ○ %d/%d #[default]' "$STYLE_QUIET" "$ready" "$total"
   fi
 }
 
@@ -267,7 +272,7 @@ status() {
   if out="$("$SELF" status-tick 2> >(log_errors))"; then
     printf '%s' "$out"
   else
-    printf '#[fg=#f7768e,bold] ! #[default]'
+    printf '%s ! #[default]' "$STYLE_ERROR"
   fi
 }
 

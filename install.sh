@@ -4,14 +4,27 @@ set -euo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 target="$HOME/.local/bin/claude-sessions"
 
+for bin in jq fzf tmux osascript; do
+  command -v "$bin" >/dev/null 2>&1 || { printf 'missing: %s\n' "$bin" >&2; exit 1; }
+done
+bash -c 'shopt -s inherit_errexit' 2>/dev/null || { printf 'bash >= 4.4 required on PATH (brew install bash)\n' >&2; exit 1; }
+
 mkdir -p "$HOME/.local/bin"
 ln -sf "$here/bin/claude-sessions" "$target"
 printf 'linked %s -> %s\n\n' "$target" "$here/bin/claude-sessions"
 
-cat <<'SNIPPET'
-Add to ~/.tmux.conf (then: prefix r to reload):
+cat <<SNIPPET
+Add to ~/.tmux.conf, then reload it (tmux source-file ~/.tmux.conf):
 
-set -g status-interval 3
-set -g status-right "#(claude-sessions status) #[fg=#7aa2f7,bg=#3b4261] %Y-%m-%d  %H:%M "
-bind-key -r g display-popup -E -w 90% -h 60% "claude-sessions list"
+  set -g status-interval 3
+  bind-key -r g display-popup -E -w 90% -h 60% "$target list"
+
+and prepend the segment to your existing status-right, e.g.
+
+  set -g status-right "#($target status) <your current status-right>"
+
+Optional, in your shell profile:
+
+  export CLAUDE_SESSIONS_BASE_DIRS="\$HOME/apps:\$HOME/personal"   # repo label roots
+  export CLAUDE_SESSIONS_STYLE_NEW='#[fg=#16161e,bg=#e0af68,bold]'  # also _READY _QUIET _ERROR
 SNIPPET
