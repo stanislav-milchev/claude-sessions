@@ -1,0 +1,2 @@
+#!/usr/bin/env bash
+[[ " ${STUB_ALIVE_PIDS:-} " == *" $1 "* ]]

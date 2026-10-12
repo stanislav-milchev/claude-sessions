@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SELF="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
+REGISTRY_DIR="${CLAUDE_SESSIONS_DIR:-$HOME/.claude/sessions}"
+STATE_FILE="${CLAUDE_SESSIONS_STATE:-$HOME/.cache/claude-sessions/seen.json}"
+NOTIFIED_FILE="$(dirname "$STATE_FILE")/notified.json"
+PROJECTS_DIR="${CLAUDE_SESSIONS_PROJECTS_DIR:-$HOME/.claude/projects}"
+ALIVE_CMD="${CLAUDE_SESSIONS_ALIVE_CMD:-kill -0}"
+
+die() {
+  printf 'claude-sessions: %s\n' "$*" >&2
+  exit 1
+}
+
+usage() {
+  cat >&2 <<'USAGE'
+usage: claude-sessions <status|list|rows|jump PID|ack PID|title PID [TEXT]|preview PID|snapshot>
+USAGE
+  exit 1
+}
+
+require_bin() {
+  command -v "$1" >/dev/null 2>&1 || die "missing required binary: $1"
+}
+
+now_ms() {
+  printf '%s' "${CLAUDE_SESSIONS_NOW_MS:-$(date +%s000)}"
+}
+
+main() {
+  require_bin jq
+  require_bin tmux
+  local cmd="${1:-}"
+  shift || true
+  case "$cmd" in
+    *) usage ;;
+  esac
+}
+
+main "$@"

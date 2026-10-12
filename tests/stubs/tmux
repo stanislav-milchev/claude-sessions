@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+printf 'tmux %s\n' "$*" >> "$STUB_LOG"
+case "$1" in
+  list-panes)   printf '%b' "${STUB_PANE_TITLES:-}" ;;
+  list-clients)
+    if [[ "$*" == *pane_id* ]]; then printf '%b' "${STUB_CLIENT_PANES:-}"
+    else printf '%b' "${STUB_CLIENT_TTYS:-}"; fi ;;
+  display)      printf '%s\n' "${STUB_DISPLAY_OUTPUT:-}" ;;
+esac

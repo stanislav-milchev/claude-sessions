@@ -1,0 +1,2 @@
+#!/usr/bin/env bash
+printf 'osascript %s\n' "$*" >> "$STUB_LOG"

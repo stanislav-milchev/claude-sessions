@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+printf 'git %s\n' "$*" >> "$STUB_LOG"
+[[ -n "${STUB_GIT_BRANCH:-}" ]] && printf '%s\n' "$STUB_GIT_BRANCH" || exit 128
