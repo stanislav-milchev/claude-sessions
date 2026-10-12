@@ -234,6 +234,20 @@ status() {
   status_line "$snap"
 }
 
+jump() {
+  local pid="$1" target session rest window pane
+  target="$(session_row "$pid" | jq -r '.tmux')"
+  [[ -n "$target" ]] || die "pid $pid has no tmux pane"
+  session="${target%%:*}"
+  rest="${target#*:}"
+  window="${rest%%.*}"
+  pane="${rest#*.}"
+  tmux switch-client -t "$session"
+  tmux select-window -t "$session:$window"
+  tmux select-pane -t "$pane"
+  ack "$pid"
+}
+
 main() {
   require_bin jq
   require_bin tmux
@@ -242,6 +256,7 @@ main() {
   case "$cmd" in
     snapshot) snapshot ;;
     status) status ;;
+    jump) [[ $# -eq 1 ]] || usage; jump "$1" ;;
     ack)   [[ $# -eq 1 ]] || usage; ack "$1" ;;
     title) [[ $# -ge 1 ]] || usage; set_title "$@" ;;
     *) usage ;;
