@@ -149,6 +149,91 @@ set_title() {
   write_json_atomic "$STATE_FILE" "$(prune_to_live "$state")"
 }
 
+read_notified() {
+  if [[ -f "$NOTIFIED_FILE" ]]; then
+    jq -ce 'type=="object"' "$NOTIFIED_FILE" >/dev/null 2>&1 || die "corrupt notified file: $NOTIFIED_FILE"
+    cat "$NOTIFIED_FILE"
+  else
+    printf '{}'
+  fi
+}
+
+auto_ack_visible_panes() {
+  local snap="$1" pane pid
+  while IFS= read -r pane; do
+    [[ -n "$pane" ]] || continue
+    while IFS= read -r pid; do
+      [[ -n "$pid" ]] || continue
+      ack "$pid"
+    done < <(jq -r --arg p "$pane" 'select(.pane == $p and .unseen) | .pid' <<<"$snap")
+  done < <(tmux list-clients -F '#{pane_id}' 2>/dev/null)
+}
+
+applescript_quote() {
+  local s="$1"
+  s="${s//\\/\\\\}"
+  s="${s//\"/\\\"}"
+  printf '%s' "$s"
+}
+
+ring_bell() {
+  local tty
+  while IFS= read -r tty; do
+    [[ -n "$tty" ]] || continue
+    printf '\a' > "$tty" 2>/dev/null || true
+  done < <(tmux list-clients -F '#{client_tty}' 2>/dev/null)
+}
+
+send_notification() {
+  local title="$1" repo="$2"
+  osascript -e "display notification \"$(applescript_quote "$title")\" with title \"$(applescript_quote "$repo") ready\"" \
+    >/dev/null 2>&1 || printf 'claude-sessions: osascript failed for notification\n' >&2
+}
+
+notify_new_ready() {
+  local snap="$1" notified row pid ts title repo rang=0
+  notified="$(read_notified)"
+  while IFS= read -r row; do
+    [[ -n "$row" ]] || continue
+    pid="$(jq -r '.pid' <<<"$row")"
+    ts="$(jq -r '.statusUpdatedAt' <<<"$row")"
+    [[ "$(jq -r --arg k "$pid" '.[$k] // 0' <<<"$notified")" == "$ts" ]] && continue
+    title="$(jq -r '.title' <<<"$row")"
+    repo="$(jq -r '.repo' <<<"$row")"
+    send_notification "$title" "$repo"
+    rang=1
+    notified="$(jq -c --arg k "$pid" --argjson ts "$ts" '.[$k] = $ts' <<<"$notified")"
+  done < <(jq -c 'select(.unseen)' <<<"$snap")
+  if [[ "$rang" -eq 1 ]]; then
+    ring_bell
+  fi
+  notified="$(jq -c --argjson live "$(live_pids_json)" 'with_entries(select(.key as $k | $live | index($k)))' <<<"$notified")"
+  write_json_atomic "$NOTIFIED_FILE" "$notified"
+}
+
+status_line() {
+  local snap="$1" total ready unseen
+  total="$(jq -s 'map(select(.tmux != "")) | length' <<<"$snap")"
+  ready="$(jq -s 'map(select(.tmux != "" and .ready)) | length' <<<"$snap")"
+  unseen="$(jq -s 'map(select(.unseen)) | length' <<<"$snap")"
+  if [[ "$unseen" -gt 0 ]]; then
+    printf '#[fg=#16161e,bg=#e0af68,bold] ● %d new · %d/%d #[default]' "$unseen" "$ready" "$total"
+  elif [[ "$ready" -gt 0 ]]; then
+    printf '#[fg=#7aa2f7] ● %d/%d #[default]' "$ready" "$total"
+  else
+    printf '#[fg=#565f89] ○ %d/%d #[default]' "$ready" "$total"
+  fi
+}
+
+status() {
+  local snap
+  snap="$(snapshot)"
+  auto_ack_visible_panes "$snap"
+  snap="$(snapshot)"
+  notify_new_ready "$snap"
+  status_line "$snap"
+}
+
 main() {
   require_bin jq
   require_bin tmux
@@ -156,6 +241,7 @@ main() {
   shift || true
   case "$cmd" in
     snapshot) snapshot ;;
+    status) status ;;
     ack)   [[ $# -eq 1 ]] || usage; ack "$1" ;;
     title) [[ $# -ge 1 ]] || usage; set_title "$@" ;;
     *) usage ;;
