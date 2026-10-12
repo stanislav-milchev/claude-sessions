@@ -99,6 +99,56 @@ snapshot() {
     || die "registry read failed"
 }
 
+write_json_atomic() {
+  local path="$1" json="$2" dir tmp
+  dir="$(dirname "$path")"
+  mkdir -p "$dir"
+  tmp="$(mktemp "$dir/.tmp.XXXXXX")"
+  printf '%s\n' "$json" > "$tmp"
+  mv "$tmp" "$path"
+}
+
+live_pids_json() {
+  snapshot | jq -sc 'map(.pid|tostring)'
+}
+
+prune_to_live() {
+  jq -c --argjson live "$(live_pids_json)" '
+    .seen   |= with_entries(select(.key as $k | $live | index($k)))
+  | .titles |= with_entries(select(.key as $k | $live | index($k)))' <<<"$1"
+}
+
+session_row() {
+  local row
+  row="$(snapshot | jq -c --argjson pid "$1" 'select(.pid == $pid)')"
+  [[ -n "$row" ]] || die "no live session with pid $1"
+  printf '%s' "$row"
+}
+
+ack() {
+  local pid="$1" ts state
+  ts="$(session_row "$pid" | jq '.statusUpdatedAt')"
+  state="$(read_state | jq -c --arg k "$pid" --argjson ts "$ts" '.seen[$k] = $ts')"
+  write_json_atomic "$STATE_FILE" "$(prune_to_live "$state")"
+}
+
+set_title() {
+  local pid="$1" text state
+  session_row "$pid" >/dev/null
+  if [[ $# -ge 2 ]]; then
+    text="$2"
+  else
+    printf 'title for %s: ' "$pid" >&2
+    IFS= read -r text || text=""
+  fi
+  if [[ -z "$text" ]]; then
+    state="$(read_state | jq -c --arg k "$pid" 'del(.titles[$k])')"
+  else
+    state="$(read_state | jq -c --arg k "$pid" --arg t "$text" '.titles[$k] = $t')"
+  fi
+  write_json_atomic "$STATE_FILE" "$(prune_to_live "$state")"
+}
+
 main() {
   require_bin jq
   require_bin tmux
@@ -106,6 +156,8 @@ main() {
   shift || true
   case "$cmd" in
     snapshot) snapshot ;;
+    ack)   [[ $# -eq 1 ]] || usage; ack "$1" ;;
+    title) [[ $# -ge 1 ]] || usage; set_title "$@" ;;
     *) usage ;;
   esac
 }
