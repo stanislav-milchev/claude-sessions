@@ -66,5 +66,3 @@ All optional, via environment variables in your shell profile:
 Test-only overrides: `CLAUDE_SESSIONS_DIR`, `CLAUDE_SESSIONS_STATE`,
 `CLAUDE_SESSIONS_PROJECTS_DIR`, `CLAUDE_SESSIONS_ALIVE_CMD`,
 `CLAUDE_SESSIONS_KILL_CMD`, `CLAUDE_SESSIONS_NOW_MS`.
-
-Design spec and implementation plan live under `docs/superpowers/`.
