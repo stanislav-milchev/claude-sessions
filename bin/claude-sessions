@@ -3,10 +3,8 @@ set -euo pipefail
 shopt -s inherit_errexit
 
 SELF="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
-REGISTRY_DIR="${CLAUDE_SESSIONS_DIR:-$HOME/.claude/sessions}"
 STATE_FILE="${CLAUDE_SESSIONS_STATE:-$HOME/.cache/claude-sessions/seen.json}"
 NOTIFIED_FILE="$(dirname "$STATE_FILE")/notified.json"
-PROJECTS_DIR="${CLAUDE_SESSIONS_PROJECTS_DIR:-$HOME/.claude/projects}"
 ALIVE_CMD="${CLAUDE_SESSIONS_ALIVE_CMD:-kill -0}"
 KILL_CMD="${CLAUDE_SESSIONS_KILL_CMD:-kill -TERM}"
 BASE_DIRS="${CLAUDE_SESSIONS_BASE_DIRS:-$HOME/apps:$HOME/personal}"
@@ -37,6 +35,24 @@ now_ms() {
   printf '%s' "${CLAUDE_SESSIONS_NOW_MS:-$(date +%s000)}"
 }
 
+default_config_dirs() {
+  local dirs="$HOME/.claude" d
+  for d in "$HOME"/.claude-profiles/*/; do
+    [[ -d "$d" ]] && dirs="$dirs:${d%/}"
+  done
+  printf '%s' "$dirs"
+}
+
+config_dirs() {
+  local list="${CLAUDE_SESSIONS_CONFIG_DIRS:-$(default_config_dirs)}"
+  printf '%s\n' "$list" | tr ':' '\n' | sed '/^$/d'
+}
+
+profiles_json() {
+  config_dirs | jq -Rsc 'split("\n") | map(select(. != "")) | to_entries
+    | map({key: .value, value: (if .key == 0 then "" else (.value | split("/") | last) end)}) | from_entries'
+}
+
 read_state() {
   if [[ ! -f "$STATE_FILE" ]]; then
     printf '%s' "$EMPTY_STATE"
@@ -59,15 +75,17 @@ process_start_matches() {
 }
 
 live_registry_files() {
-  local f pid recorded_start
-  for f in "$REGISTRY_DIR"/*.json; do
-    [[ -e "$f" ]] || continue
-    pid="$(registry_pid "$f")"
-    $ALIVE_CMD "$pid" 2>/dev/null || continue
-    recorded_start="$(jq -r '.procStart // ""' "$f")"
-    process_start_matches "$pid" "$recorded_start" || continue
-    printf '%s\n' "$f"
-  done
+  local cfg f pid recorded_start
+  while IFS= read -r cfg; do
+    for f in "$cfg"/sessions/*.json; do
+      [[ -e "$f" ]] || continue
+      pid="$(registry_pid "$f")"
+      $ALIVE_CMD "$pid" 2>/dev/null || continue
+      recorded_start="$(jq -r '.procStart // ""' "$f")"
+      process_start_matches "$pid" "$recorded_start" || continue
+      printf '%s\n' "$f"
+    done
+  done < <(config_dirs)
 }
 
 pane_titles_json() {
@@ -79,6 +97,8 @@ SNAPSHOT_JQ='
 def need(f): if .[f] == null then error("missing field " + f + " in " + input_filename) else . end;
 [inputs
  | need("cwd") | need("name") | need("status") | need("statusUpdatedAt")
+ | (input_filename | split("/") | .[:-2] | join("/")) as $configDir
+ | ($profiles[$configDir] // ($configDir | split("/") | last)) as $profile
  | (.pid|tostring) as $key
  | (.tmux // "") as $tmux
  | (if $tmux == "" then "" else ($tmux | split(".") | last) end) as $pane
@@ -90,12 +110,14 @@ def need(f): if .[f] == null then error("missing field " + f + " in " + input_fi
  | (.cwd
     | reduce $bases[] as $b (.; if startswith($b + "/") then .[($b | length) + 1:] else . end)
     | sub("/(\\.claude/worktrees|\\.worktrees)/"; " ⎇ ")
-    | if startswith("/") then (split("/") | last) else . end) as $repo
+    | if startswith("/") then (split("/") | last) else . end
+    | if $profile == "" then . else . + " (" + $profile + ")" end) as $repo
  | (.status != "busy") as $ready
  | ($ready and $tmux != "" and (.statusUpdatedAt > ($state.seen[$key] // 0))) as $unseen
  | (if $unseen then 0 elif $tmux == "" then 3 elif $ready then 1 else 2 end) as $group
  | {pid, sessionId, cwd, tmux: $tmux, pane: $pane, name, status, statusUpdatedAt,
-    title: $title, repo: $repo, ready: $ready, unseen: $unseen,
+    title: $title, repo: $repo, profile: $profile, configDir: $configDir,
+    ready: $ready, unseen: $unseen,
     idleFor: ((($now - .statusUpdatedAt) / 1000) | floor), group: $group}
 ]
 | sort_by(.group, .statusUpdatedAt)
@@ -111,6 +133,7 @@ snapshot() {
     --argjson titles "$(pane_titles_json)" \
     --argjson now "$(now_ms)" \
     --argjson bases "$(printf '%s' "$BASE_DIRS" | jq -Rc 'split(":") | map(select(. != ""))')" \
+    --argjson profiles "$(profiles_json)" \
     "$SNAPSHOT_JQ" "${files[@]}" \
     || die "registry read failed"
 }
@@ -338,7 +361,7 @@ rows() {
 }
 
 transcript_path() {
-  find "$PROJECTS_DIR" -maxdepth 2 -name "$1.jsonl" -print -quit 2>/dev/null
+  find "$1/projects" -maxdepth 2 -name "$2.jsonl" -print -quit 2>/dev/null
 }
 
 recent_prompts() {
@@ -351,13 +374,14 @@ recent_prompts() {
 }
 
 preview() {
-  local row cwd sid branch transcript
+  local row cwd sid cfg branch transcript
   row="$(session_row "$1")"
   cwd="$(jq -r '.cwd' <<<"$row")"
   sid="$(jq -r '.sessionId' <<<"$row")"
+  cfg="$(jq -r '.configDir' <<<"$row")"
   branch="$(git -C "$cwd" rev-parse --abbrev-ref HEAD 2>/dev/null || printf '%s' '-')"
   printf 'cwd:    %s\nbranch: %s\n\nrecent prompts:\n' "$cwd" "$branch"
-  transcript="$(transcript_path "$sid")"
+  transcript="$(transcript_path "$cfg" "$sid")"
   if [[ -z "$transcript" ]]; then
     printf '  no transcript\n'
     return 0

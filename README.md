@@ -5,8 +5,9 @@ are waiting for you, and which of those you have not looked at yet. The moment a
 session finishes and needs your input you get a macOS notification and a
 terminal bell, and the tmux status bar shows how many are waiting.
 
-Reads Claude Code's own session registry (`~/.claude/sessions/*.json`). No
-hooks, no daemon, no polling of pane contents.
+Reads Claude Code's own session registry (`~/.claude/sessions/*.json`, plus any
+extra profiles under `~/.claude-profiles/`). No hooks, no daemon, no polling of
+pane contents.
 
 ![popup with session list, preview pane and status bar](docs/screenshot.png)
 
@@ -52,6 +53,7 @@ All optional, via environment variables in your shell profile:
 
 | Variable | Default | Purpose |
 |---|---|---|
+| `CLAUDE_SESSIONS_CONFIG_DIRS` | `$HOME/.claude` + every `$HOME/.claude-profiles/*` | Claude config dirs to scan, colon-separated. First one is the default profile; sessions from the others show `(profile)` after the repo |
 | `CLAUDE_SESSIONS_BASE_DIRS` | `$HOME/apps:$HOME/personal` | Roots stripped from cwd for the repo column; worktrees under them render as `repo ⎇ branch` |
 | `CLAUDE_SESSIONS_STYLE_NEW` | `#[fg=#16161e,bg=#e0af68,bold]` | tmux style when unseen sessions exist |
 | `CLAUDE_SESSIONS_STYLE_READY` | `#[fg=#7aa2f7]` | style when sessions wait but all are seen |
@@ -63,6 +65,5 @@ All optional, via environment variables in your shell profile:
     brew install bats-core
     bats tests/
 
-Test-only overrides: `CLAUDE_SESSIONS_DIR`, `CLAUDE_SESSIONS_STATE`,
-`CLAUDE_SESSIONS_PROJECTS_DIR`, `CLAUDE_SESSIONS_ALIVE_CMD`,
+Test-only overrides: `CLAUDE_SESSIONS_STATE`, `CLAUDE_SESSIONS_ALIVE_CMD`,
 `CLAUDE_SESSIONS_KILL_CMD`, `CLAUDE_SESSIONS_NOW_MS`.

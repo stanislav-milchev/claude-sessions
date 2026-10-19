@@ -163,3 +163,32 @@ teardown() { teardown_env; }
   [ "$(jq -r 'select(.pid==12).repo' <<<"$output")" = "bar ⎇ X/pkg" ]
   [ "$(jq -r 'select(.pid==13).repo' <<<"$output")" = "sub" ]
 }
+
+@test "sessions from every config dir are merged, non-default profile tagged" {
+  export CLAUDE_SESSIONS_CONFIG_DIRS="$TEST_TMP/cfg:$TEST_TMP/profiles/test"
+  make_session 11 "a" user idle 1 "$HOME/apps/a" "a:@1.%1"
+  make_profile_session "$TEST_TMP/profiles/test/sessions" 12 "b" user idle 1 "$HOME/apps/b" "a:@1.%2"
+  run "$BIN" snapshot
+  [ "$status" -eq 0 ]
+  [ "$(jq -r 'select(.pid==11).repo' <<<"$output")" = "a" ]
+  [ "$(jq -r 'select(.pid==12).repo' <<<"$output")" = "b (test)" ]
+  [ "$(jq -r 'select(.pid==12).profile' <<<"$output")" = "test" ]
+  [ "$(jq -r 'select(.pid==11).profile' <<<"$output")" = "" ]
+}
+
+@test "default config dirs are ~/.claude plus every ~/.claude-profiles/*" {
+  unset CLAUDE_SESSIONS_CONFIG_DIRS
+  make_profile_session "$HOME/.claude/sessions" 11 "a" user idle 1 "$HOME/apps/a" "a:@1.%1"
+  make_profile_session "$HOME/.claude-profiles/work/sessions" 12 "b" user idle 1 "$HOME/apps/b" "a:@1.%2"
+  run "$BIN" snapshot
+  [ "$status" -eq 0 ]
+  [ "$(jq -r 'select(.pid==11).repo' <<<"$output")" = "a" ]
+  [ "$(jq -r 'select(.pid==12).repo' <<<"$output")" = "b (work)" ]
+}
+
+@test "waiting status counts as ready" {
+  make_session 11 "a" user waiting 1 "$HOME/apps/a" "a:@1.%1"
+  run "$BIN" snapshot
+  [ "$(jq -r .ready <<<"$output")" = "true" ]
+  [ "$(jq -r .status <<<"$output")" = "waiting" ]
+}

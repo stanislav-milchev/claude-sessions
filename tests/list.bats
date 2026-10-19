@@ -124,3 +124,12 @@ teardown() { teardown_env; }
   run "$BIN" preview 11
   [[ "$output" == *"(none)"* ]]
 }
+
+@test "preview reads the transcript from the session's own profile" {
+  export CLAUDE_SESSIONS_CONFIG_DIRS="$TEST_TMP/cfg:$TEST_TMP/profiles/test"
+  make_profile_session "$TEST_TMP/profiles/test/sessions" 12 "b" user idle 500 "$HOME/apps/b" "a:@1.%2"
+  mkdir -p "$TEST_TMP/profiles/test/projects/p"
+  echo '{"type":"user","message":{"content":"prompt from the test profile"}}' > "$TEST_TMP/profiles/test/projects/p/sid-12.jsonl"
+  run "$BIN" preview 12
+  [[ "$output" == *"prompt from the test profile"* ]]
+}

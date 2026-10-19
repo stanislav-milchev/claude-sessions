@@ -150,3 +150,11 @@ teardown() { teardown_env; }
   run env CLAUDE_SESSIONS_STYLE_ERROR='#[fg=magenta]' "$BIN" status
   [[ "$output" == "#[fg=magenta] ! "* ]]
 }
+
+@test "notification title carries the profile tag" {
+  not_first_run
+  export CLAUDE_SESSIONS_CONFIG_DIRS="$TEST_TMP/cfg:$TEST_TMP/profiles/test"
+  make_profile_session "$TEST_TMP/profiles/test/sessions" 12 "b" user idle 500 "$HOME/apps/smart-proxy" "a:@1.%2"
+  "$BIN" status >/dev/null
+  grep -q 'with title "smart-proxy (test) ready"' "$STUB_LOG"
+}
