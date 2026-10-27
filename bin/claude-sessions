@@ -63,10 +63,6 @@ read_state() {
   cat "$STATE_FILE"
 }
 
-registry_pid() {
-  jq -er '.pid // error("no pid")' "$1" 2>/dev/null || die "unreadable registry file or missing pid: $1"
-}
-
 process_start_matches() {
   local pid="$1" recorded="$2" actual
   [[ -n "$recorded" ]] || return 0
@@ -74,16 +70,28 @@ process_start_matches() {
   [[ "$actual" == "$recorded" ]]
 }
 
-live_registry_files() {
-  local cfg f pid recorded_start
+registry_record() {
+  local f="$1" record
+  if record="$(jq -c --arg file "$f" '. + {file: $file}' "$f" 2>/dev/null)"; then
+    printf '%s' "$record"
+    return 0
+  fi
+  [[ -e "$f" ]] && die "unreadable registry file: $f"
+  return 1
+}
+
+live_registry_records() {
+  local cfg f pid record recorded_start
   while IFS= read -r cfg; do
     for f in "$cfg"/sessions/*.json; do
       [[ -e "$f" ]] || continue
-      pid="$(registry_pid "$f")"
+      record="$(registry_record "$f")" || continue
+      pid="$(jq -r '.pid // empty' <<<"$record")"
+      [[ -n "$pid" ]] || die "missing pid in $f"
       $ALIVE_CMD "$pid" 2>/dev/null || continue
-      recorded_start="$(jq -r '.procStart // ""' "$f")"
+      recorded_start="$(jq -r '.procStart // ""' <<<"$record")"
       process_start_matches "$pid" "$recorded_start" || continue
-      printf '%s\n' "$f"
+      printf '%s\n' "$record"
     done
   done < <(config_dirs)
 }
@@ -94,10 +102,10 @@ pane_titles_json() {
 }
 
 SNAPSHOT_JQ='
-def need(f): if .[f] == null then error("missing field " + f + " in " + input_filename) else . end;
+def need(f): if .[f] == null then error("missing field " + f + " in " + .file) else . end;
 [inputs
  | need("cwd") | need("name") | need("status") | need("statusUpdatedAt")
- | (input_filename | split("/") | .[:-2] | join("/")) as $configDir
+ | (.file | split("/") | .[:-2] | join("/")) as $configDir
  | ($profiles[$configDir] // ($configDir | split("/") | last)) as $profile
  | (.pid|tostring) as $key
  | (.tmux // "") as $tmux
@@ -121,20 +129,19 @@ def need(f): if .[f] == null then error("missing field " + f + " in " + input_fi
     idleFor: ((($now - .statusUpdatedAt) / 1000) | floor), group: $group}
 ]
 | sort_by(.group, .statusUpdatedAt)
-| .[] | del(.group)'
+| .[] | del(.group, .file)'
 
 snapshot() {
-  local files=() f listing
-  listing="$(live_registry_files)"
-  [[ -n "$listing" ]] || return 0
-  while IFS= read -r f; do files+=("$f"); done <<<"$listing"
+  local records
+  records="$(live_registry_records)"
+  [[ -n "$records" ]] || return 0
   jq -nc \
     --argjson state "$(read_state)" \
     --argjson titles "$(pane_titles_json)" \
     --argjson now "$(now_ms)" \
     --argjson bases "$(printf '%s' "$BASE_DIRS" | jq -Rc 'split(":") | map(select(. != ""))')" \
     --argjson profiles "$(profiles_json)" \
-    "$SNAPSHOT_JQ" "${files[@]}" \
+    "$SNAPSHOT_JQ" <<<"$records" \
     || die "registry read failed"
 }
 

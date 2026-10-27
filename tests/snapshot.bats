@@ -192,3 +192,12 @@ teardown() { teardown_env; }
   [ "$(jq -r .ready <<<"$output")" = "true" ]
   [ "$(jq -r .status <<<"$output")" = "waiting" ]
 }
+
+@test "registry file removed between listing and read is skipped, not an error" {
+  make_session 11 "a" user idle 1 "$HOME/apps/a" "a:@1.%1"
+  make_session 12 "b" user idle 1 "$HOME/apps/b" "a:@1.%2"
+  export STUB_ALIVE_DELETE="$CLAUDE_SESSIONS_DIR/12.json"
+  run "$BIN" snapshot
+  [ "$status" -eq 0 ]
+  [ "$(jq -r .pid <<<"$output")" = "11" ]
+}
