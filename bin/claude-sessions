@@ -223,11 +223,7 @@ applescript_quote() {
 }
 
 ring_bell() {
-  local tty
-  while IFS= read -r tty; do
-    [[ -n "$tty" ]] || continue
-    printf '\a' > "$tty" 2>/dev/null || true
-  done < <(tmux list-clients -F '#{client_tty}' 2>/dev/null)
+  osascript -e 'beep 1' >/dev/null 2>&1 || printf 'claude-sessions: osascript beep failed\n' >&2
 }
 
 send_notification() {

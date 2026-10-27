@@ -2,8 +2,8 @@
 
 One place for every Claude Code session running in tmux: which are busy, which
 are waiting for you, and which of those you have not looked at yet. The moment a
-session finishes and needs your input you get a macOS notification and a
-terminal bell, and the tmux status bar shows how many are waiting.
+session finishes and needs your input you get a macOS notification and the
+macOS alert sound, and the tmux status bar shows how many are waiting.
 
 Reads Claude Code's own session registry (`~/.claude/sessions/*.json`, plus any
 extra profiles under `~/.claude-profiles/`). No hooks, no daemon, no polling of
@@ -36,7 +36,7 @@ Then add the printed tmux snippet to `~/.tmux.conf`.
   `ctrl-t` sets your own title for a session. `ctrl-r` reloads. Preview on the
   right shows cwd, branch and recent prompts.
 - Looking at a pane acknowledges it. A session becoming ready sends a macOS
-  notification and a terminal bell. The first tick after install seeds state
+  notification and plays the macOS alert sound. The first tick after install seeds state
   silently so already-idle sessions do not all fire at once.
 
 Row markers: `●` waiting and unseen · `·` waiting and seen · blank busy ·

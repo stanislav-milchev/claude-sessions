@@ -42,7 +42,7 @@ teardown() { teardown_env; }
   run "$BIN" status
   [[ "$output" == *"● 1/1"* ]]
   [ "$(jq -r '.seen["11"]' "$CLAUDE_SESSIONS_STATE")" = "500" ]
-  [ "$(stub_log_lines osascript)" = "0" ]
+  [ "$(stub_log_lines "display notification")" = "0" ]
 }
 
 @test "new unseen session notifies once with title and repo" {
@@ -51,7 +51,7 @@ teardown() { teardown_env; }
   export STUB_PANE_TITLES="%1 _ PR 418 regressions\n"
   "$BIN" status >/dev/null
   "$BIN" status >/dev/null
-  [ "$(stub_log_lines osascript)" = "1" ]
+  [ "$(stub_log_lines "display notification")" = "1" ]
   grep -q 'display notification "PR 418 regressions" with title "smart-proxy ready"' "$STUB_LOG"
 }
 
@@ -63,23 +63,24 @@ teardown() { teardown_env; }
   "$BIN" status >/dev/null
   make_session 11 "a" user idle 700 "$HOME/apps/a" "a:@1.%1"
   "$BIN" status >/dev/null
-  [ "$(stub_log_lines osascript)" = "2" ]
+  [ "$(stub_log_lines "display notification")" = "2" ]
 }
 
 @test "desktop session never notifies" {
   not_first_run
   make_session 11 "a" user idle 500 "$HOME/apps/a"
   "$BIN" status >/dev/null
-  [ "$(stub_log_lines osascript)" = "0" ]
+  [ "$(stub_log_lines "display notification")" = "0" ]
 }
 
-@test "bell written to each client tty" {
+@test "bell is a single macOS beep per tick with new sessions" {
   not_first_run
   make_session 11 "a" user idle 500 "$HOME/apps/a" "a:@1.%1"
-  export STUB_CLIENT_TTYS="$TEST_TMP/tty1\n$TEST_TMP/tty2\n"
+  make_session 12 "b" user idle 500 "$HOME/apps/b" "a:@1.%2"
   "$BIN" status >/dev/null
-  [ "$(od -An -c "$TEST_TMP/tty1" | tr -d ' ')" = "\\a" ]
-  [ "$(od -An -c "$TEST_TMP/tty2" | tr -d ' ')" = "\\a" ]
+  [ "$(grep -c '^osascript -e beep 1$' "$STUB_LOG")" = "1" ]
+  "$BIN" status >/dev/null
+  [ "$(grep -c '^osascript -e beep 1$' "$STUB_LOG")" = "1" ]
 }
 
 @test "title with quotes and backslashes is escaped for osascript" {
@@ -113,11 +114,11 @@ teardown() { teardown_env; }
   make_session 12 "b" user idle 500 "$HOME/apps/b" "a:@1.%2"
   run "$BIN" status
   [[ "$output" == *"2 new"* ]]
-  [ "$(stub_log_lines osascript)" = "0" ]
+  [ "$(stub_log_lines "display notification")" = "0" ]
   [ "$(jq -c 'keys' "$(dirname "$CLAUDE_SESSIONS_STATE")/notified.json")" = '["11","12"]' ]
   make_session 13 "c" user idle 600 "$HOME/apps/c" "a:@1.%3"
   "$BIN" status >/dev/null
-  [ "$(stub_log_lines osascript)" = "1" ]
+  [ "$(stub_log_lines "display notification")" = "1" ]
 }
 
 @test "corrupt registry on status tick prints error marker, logs, exits 0" {
