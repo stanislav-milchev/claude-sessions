@@ -73,14 +73,29 @@ teardown() { teardown_env; }
   [ "$(stub_log_lines "display notification")" = "0" ]
 }
 
-@test "bell is a single macOS beep per tick with new sessions" {
+@test "bell plays the sound file once per tick with new sessions" {
   not_first_run
   make_session 11 "a" user idle 500 "$HOME/apps/a" "a:@1.%1"
   make_session 12 "b" user idle 500 "$HOME/apps/b" "a:@1.%2"
   "$BIN" status >/dev/null
-  [ "$(grep -c '^osascript -e beep 1$' "$STUB_LOG")" = "1" ]
+  [ "$(grep -c '^afplay /System/Library/Sounds/Glass.aiff$' "$STUB_LOG")" = "1" ]
   "$BIN" status >/dev/null
-  [ "$(grep -c '^osascript -e beep 1$' "$STUB_LOG")" = "1" ]
+  [ "$(grep -c '^afplay ' "$STUB_LOG")" = "1" ]
+}
+
+@test "bell sound file can be overridden by env" {
+  not_first_run
+  make_session 11 "a" user idle 500 "$HOME/apps/a" "a:@1.%1"
+  env CLAUDE_SESSIONS_SOUND=/tmp/custom.aiff "$BIN" status >/dev/null
+  grep -q '^afplay /tmp/custom.aiff$' "$STUB_LOG"
+}
+
+@test "empty bell sound disables the sound" {
+  not_first_run
+  make_session 11 "a" user idle 500 "$HOME/apps/a" "a:@1.%1"
+  env CLAUDE_SESSIONS_SOUND= "$BIN" status >/dev/null
+  [ "$(stub_log_lines afplay)" = "0" ]
+  [ "$(stub_log_lines "display notification")" = "1" ]
 }
 
 @test "title with quotes and backslashes is escaped for osascript" {

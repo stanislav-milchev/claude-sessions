@@ -2,8 +2,8 @@
 
 One place for every Claude Code session running in tmux: which are busy, which
 are waiting for you, and which of those you have not looked at yet. The moment a
-session finishes and needs your input you get a macOS notification and the
-macOS alert sound, and the tmux status bar shows how many are waiting.
+session finishes and needs your input you get a macOS notification and a
+sound, and the tmux status bar shows how many are waiting.
 
 Reads Claude Code's own session registry (`~/.claude/sessions/*.json`, plus any
 extra profiles under `~/.claude-profiles/`). No hooks, no daemon, no polling of
@@ -36,7 +36,7 @@ Then add the printed tmux snippet to `~/.tmux.conf`.
   `ctrl-t` sets your own title for a session. `ctrl-r` reloads. Preview on the
   right shows cwd, branch and recent prompts.
 - Looking at a pane acknowledges it. A session becoming ready sends a macOS
-  notification and plays the macOS alert sound. The first tick after install seeds state
+  notification and plays a sound (Glass by default, configurable). The first tick after install seeds state
   silently so already-idle sessions do not all fire at once.
 
 Row markers: `●` waiting and unseen · `·` waiting and seen · blank busy ·
@@ -59,6 +59,7 @@ All optional, via environment variables in your shell profile:
 | `CLAUDE_SESSIONS_STYLE_READY` | `#[fg=#7aa2f7]` | style when sessions wait but all are seen |
 | `CLAUDE_SESSIONS_STYLE_QUIET` | `#[fg=#565f89]` | style when nothing waits |
 | `CLAUDE_SESSIONS_STYLE_ERROR` | `#[fg=#f7768e,bold]` | style of the `!` marker |
+| `CLAUDE_SESSIONS_SOUND` | `/System/Library/Sounds/Glass.aiff` | sound played when a session becomes ready; any file `afplay` can play, empty disables it |
 
 ## Dev
 

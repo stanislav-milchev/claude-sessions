@@ -12,6 +12,7 @@ STYLE_NEW="${CLAUDE_SESSIONS_STYLE_NEW:-#[fg=#16161e,bg=#e0af68,bold]}"
 STYLE_READY="${CLAUDE_SESSIONS_STYLE_READY:-#[fg=#7aa2f7]}"
 STYLE_QUIET="${CLAUDE_SESSIONS_STYLE_QUIET:-#[fg=#565f89]}"
 STYLE_ERROR="${CLAUDE_SESSIONS_STYLE_ERROR:-#[fg=#f7768e,bold]}"
+SOUND="${CLAUDE_SESSIONS_SOUND-/System/Library/Sounds/Glass.aiff}"
 ERROR_LOG="$(dirname "$STATE_FILE")/errors.log"
 EMPTY_STATE='{"seen":{},"titles":{}}'
 
@@ -223,7 +224,8 @@ applescript_quote() {
 }
 
 ring_bell() {
-  osascript -e 'beep 1' >/dev/null 2>&1 || printf 'claude-sessions: osascript beep failed\n' >&2
+  [[ -n "$SOUND" ]] || return 0
+  afplay "$SOUND" >/dev/null 2>&1 || printf 'claude-sessions: afplay failed for %s\n' "$SOUND" >&2
 }
 
 send_notification() {

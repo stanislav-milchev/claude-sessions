@@ -1,0 +1,2 @@
+#!/usr/bin/env bash
+printf 'afplay %s\n' "$*" >> "$STUB_LOG"
