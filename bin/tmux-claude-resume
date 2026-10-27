@@ -1,0 +1,115 @@
+#!/usr/bin/env bash
+set -euo pipefail
+shopt -s inherit_errexit
+
+SHELLS_RE='^-?(zsh|bash|sh|fish)$'
+
+die() {
+  printf 'tmux-claude-resume: %s\n' "$*" >&2
+  exit 1
+}
+
+usage() {
+  printf 'usage: tmux-claude-resume <save|restore [--dry-run]|show>\n' >&2
+  exit 1
+}
+
+resurrect_dir() {
+  local default_dir="${XDG_DATA_HOME:-$HOME/.local/share}/tmux/resurrect"
+  [[ -d "$HOME/.tmux/resurrect" ]] && default_dir="$HOME/.tmux/resurrect"
+  local dir
+  dir="$(tmux show-option -gqv @resurrect-dir)"
+  dir="${dir:-$default_dir}"
+  dir="${dir//\$HOME/$HOME}"
+  printf '%s' "${dir/#\~/$HOME}"
+}
+
+state_file() {
+  printf '%s/claude-sessions.tsv' "$(resurrect_dir)"
+}
+
+default_config_dirs() {
+  local dirs="$HOME/.claude" d
+  for d in "$HOME"/.claude-profiles/*/; do
+    [[ -d "$d" ]] && dirs="$dirs:${d%/}"
+  done
+  printf '%s' "$dirs"
+}
+
+config_dirs() {
+  printf '%s\n' "${CLAUDE_SESSIONS_CONFIG_DIRS:-$(default_config_dirs)}" | tr ':' '\n' | sed '/^$/d'
+}
+
+descendants() {
+  local child
+  for child in $(pgrep -P "$1" || true); do
+    printf '%s\n' "$child"
+    descendants "$child"
+  done
+}
+
+registry_entry() {
+  local pid="$1" dir registry started
+  started="$(TZ=UTC ps -p "$pid" -o lstart= | sed 's/^ *//; s/ *$//' || true)"
+  while read -r dir; do
+    registry="$dir/sessions/$pid.json"
+    [[ -f "$registry" ]] || continue
+    jq -er --arg dir "$dir" --arg started "$started" \
+      'select(.procStart == $started) | [$dir, .sessionId, .cwd] | @tsv' "$registry" && return 0
+  done < <(config_dirs)
+  return 1
+}
+
+save() {
+  local out tmp target pane_pid pid entry
+  out="$(state_file)"
+  mkdir -p "$(dirname "$out")"
+  tmp="$(mktemp "$out.XXXXXX")"
+  while IFS=$'\t' read -r target pane_pid; do
+    for pid in $(descendants "$pane_pid"); do
+      if entry="$(registry_entry "$pid")"; then
+        printf '%s\t%s\n' "$target" "$entry" >>"$tmp"
+        break
+      fi
+    done
+  done < <(tmux list-panes -a -F '#{session_name}:#{window_index}.#{pane_index}'$'\t#{pane_pid}')
+  mv "$tmp" "$out"
+}
+
+resume_command() {
+  local config_dir="$1" session_id="$2" cwd="$3" env_prefix=""
+  [[ "$config_dir" != "$HOME/.claude" ]] && env_prefix="CLAUDE_CONFIG_DIR=$(printf '%q' "$config_dir") "
+  printf 'cd %q && %sclaude --resume %q' "$cwd" "$env_prefix" "$session_id"
+}
+
+restore() {
+  local dry_run="${1:-}" file target config_dir session_id cwd current cmd
+  file="$(state_file)"
+  [[ -f "$file" ]] || die "no saved claude sessions at $file"
+  while IFS=$'\t' read -r target config_dir session_id cwd; do
+    if ! current="$(tmux display -p -t "$target" '#{pane_current_command}' 2>/dev/null)"; then
+      printf 'skip %s: pane missing\n' "$target" >&2
+      continue
+    fi
+    if [[ ! "$current" =~ $SHELLS_RE ]]; then
+      printf 'skip %s: pane busy with %s\n' "$target" "$current" >&2
+      continue
+    fi
+    cmd="$(resume_command "$config_dir" "$session_id" "$cwd")"
+    if [[ "$dry_run" == "--dry-run" ]]; then
+      printf '%s\t%s\n' "$target" "$cmd"
+    else
+      tmux send-keys -t "$target" "$cmd" Enter
+    fi
+  done <"$file"
+}
+
+command -v jq >/dev/null 2>&1 || die "missing required binary: jq"
+[[ -n "${TMUX:-}" ]] || die "must run inside tmux"
+
+case "${1:-}" in
+  save) save ;;
+  restore) restore "${2:-}" ;;
+  show) column -t -s $'\t' "$(state_file)" ;;
+  *) usage ;;
+esac

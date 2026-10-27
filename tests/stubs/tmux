@@ -5,5 +5,14 @@ case "$1" in
   list-clients)
     if [[ "$*" == *pane_id* ]]; then printf '%b' "${STUB_CLIENT_PANES:-}"
     else printf '%b' "${STUB_CLIENT_TTYS:-}"; fi ;;
-  display)      printf '%s\n' "${STUB_DISPLAY_OUTPUT:-}" ;;
+  display)
+    if [[ -n "${STUB_PANE_COMMANDS:-}" ]]; then
+      args=("$@")
+      for ((i = 0; i < ${#args[@]}; i++)); do
+        [[ "${args[i]}" == "-t" ]] && target="${args[i + 1]}"
+      done
+      printf '%b' "$STUB_PANE_COMMANDS" | awk -F'\t' -v t="$target" '$1 == t { print $2; found = 1 } END { exit !found }'
+    else
+      printf '%s\n' "${STUB_DISPLAY_OUTPUT:-}"
+    fi ;;
 esac

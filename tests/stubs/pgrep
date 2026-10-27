@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+[[ "$1" == "-P" ]] || exit 2
+found=1
+for edge in ${STUB_CHILDREN:-}; do
+  if [[ "${edge%%:*}" == "$2" ]]; then
+    printf '%s\n' "${edge#*:}"
+    found=0
+  fi
+done
+exit "$found"
