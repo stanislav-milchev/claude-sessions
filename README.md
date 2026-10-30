@@ -35,6 +35,11 @@ Then add the printed tmux snippet to `~/.tmux.conf`.
   after a y/N prompt (its tmux pane, or the process for a desktop-app session).
   `ctrl-t` sets your own title for a session. `ctrl-r` reloads. Preview on the
   right shows cwd, branch and recent prompts.
+- Window tabs: every status tick sets the tmux window option `@claude_waiting`
+  on windows that hold an unseen waiting session and clears it otherwise. Put
+  `#{?@claude_waiting,#[fg=#e0af68]● #[fg=<your fg>],}` before `#W` in your
+  `window-status-format` and `window-status-current-format` to get an orange
+  dot on those tabs.
 - Looking at a pane acknowledges it. A session becoming ready sends a macOS
   notification and plays a sound (Glass by default, configurable). The first tick after install seeds state
   silently so already-idle sessions do not all fire at once.

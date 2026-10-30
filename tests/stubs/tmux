@@ -15,4 +15,5 @@ case "$1" in
     else
       printf '%s\n' "${STUB_DISPLAY_OUTPUT:-}"
     fi ;;
+  list-windows) printf '%b' "${STUB_FLAGGED_WINDOWS:-}" ;;
 esac

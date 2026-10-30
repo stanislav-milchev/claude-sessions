@@ -174,3 +174,32 @@ teardown() { teardown_env; }
   "$BIN" status >/dev/null
   grep -q 'with title "smart-proxy (test) ready"' "$STUB_LOG"
 }
+
+@test "window holding an unseen session gets flagged" {
+  not_first_run
+  make_session 11 "a" user idle 500 "$HOME/apps/a" "proj:@7.%1"
+  make_session 12 "b" user busy 500 "$HOME/apps/b" "proj:@8.%2"
+  "$BIN" status >/dev/null
+  grep -q '^tmux set-option -w -t @7 @claude_waiting 1$' "$STUB_LOG"
+  [ "$(grep -c 'set-option -w -t @8' "$STUB_LOG")" = "0" ]
+}
+
+@test "flagged window no longer waiting gets cleared, still-waiting one untouched" {
+  not_first_run
+  make_session 11 "a" user idle 500 "$HOME/apps/a" "proj:@7.%1"
+  export STUB_FLAGGED_WINDOWS="@7 1\n@9 1\n@10 \n"
+  "$BIN" status >/dev/null
+  grep -q '^tmux set-option -wu -t @9 @claude_waiting$' "$STUB_LOG"
+  [ "$(grep -c 'set-option -w -t @7' "$STUB_LOG")" = "0" ]
+  [ "$(grep -c 'set-option -wu -t @7' "$STUB_LOG")" = "0" ]
+  [ "$(grep -c 't @10' "$STUB_LOG")" = "0" ]
+}
+
+@test "seen and desktop sessions do not flag windows" {
+  not_first_run
+  make_session 11 "a" user idle 500 "$HOME/apps/a" "proj:@7.%1"
+  make_session 12 "b" user idle 500 "$HOME/apps/b"
+  "$BIN" ack 11
+  "$BIN" status >/dev/null
+  [ "$(grep -c 'set-option -w ' "$STUB_LOG")" = "0" ]
+}

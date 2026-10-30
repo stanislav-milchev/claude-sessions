@@ -22,6 +22,12 @@ Add to ~/.tmux.conf, then reload it (tmux source-file ~/.tmux.conf):
   set -g status-interval 3
   bind-key -r g display-popup -E -w 90% -h 60% "$target list"
 
+To put an orange dot before the name of any window whose Claude session is
+waiting on you, add this in front of #W in window-status-format and
+window-status-current-format (restore your own fg colour after the dot):
+
+  #{?@claude_waiting,#[fg=#e0af68]● #[fg=<your fg>],}#W
+
 and prepend the segment to your existing status-right, e.g.
 
   set -g status-right "#($target status) <your current status-right>"

@@ -278,12 +278,36 @@ status_line() {
   fi
 }
 
+waiting_window_ids() {
+  jq -r 'select(.unseen) | .tmux | split(":")[1] | split(".")[0]' <<<"$1" | sort -u
+}
+
+flagged_window_ids() {
+  tmux list-windows -a -F '#{window_id} #{@claude_waiting}' 2>/dev/null \
+    | awk '$2 == "1" { print $1 }' | sort -u
+}
+
+sync_window_flags() {
+  local waiting flagged window
+  waiting="$(waiting_window_ids "$1")"
+  flagged="$(flagged_window_ids)"
+  while IFS= read -r window; do
+    [[ -n "$window" ]] || continue
+    tmux set-option -w -t "$window" @claude_waiting 1 2>/dev/null || true
+  done < <(comm -23 <(printf '%s\n' "$waiting") <(printf '%s\n' "$flagged"))
+  while IFS= read -r window; do
+    [[ -n "$window" ]] || continue
+    tmux set-option -wu -t "$window" @claude_waiting 2>/dev/null || true
+  done < <(comm -13 <(printf '%s\n' "$waiting") <(printf '%s\n' "$flagged"))
+}
+
 status_tick() {
   local snap
   snap="$(snapshot)"
   auto_ack_visible_panes "$snap"
   snap="$(snapshot)"
   notify_new_ready "$snap"
+  sync_window_flags "$snap"
   status_line "$snap"
 }
 
